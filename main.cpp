@@ -1,4 +1,4 @@
-#include <iostream> 
+#include <iostream>
 #include <fstream>
 #include <string>
 #include <cmath>
@@ -6,9 +6,10 @@
 #include <iomanip>
 #include <random>
 #include <list>
-#include <stdio.h> 
-#include <math.h> 
+#include <stdio.h>
+#include <math.h>
 #include <chrono>
+#include <omp.h>
 
 using namespace std;
 std::default_random_engine generator;
@@ -34,22 +35,24 @@ double N_mean = 370 * pow(Z, 2) * Steplength * (1 - 1 / (pow(n_mean*beta, 2))) *
 double x_grid(50e-3), y_grid(250e-3), X_grid(17.6), Y_grid(20.0);
 int nb_x(int(X_grid / x_grid)), nb_y(int(Y_grid / y_grid));
 
-
-vector<double> fast_simulation(int Np)
+int main()
 {
+    printf("N_mean = %f \n", N_mean);
+    auto begin = std::chrono::high_resolution_clock::now();
+    int Np = 10000;
 	double Lx[4];
 	Lx[0] = 3, Lx[1] = 5, Lx[2] = 5, Lx[3] = 5;
 	int count_tot = 0;
 	int count_passed = 0;
 	int A;
-	vector<double> M;
+	std::ofstream outfile("output.txt");
+
+    #pragma omp parallel for ordered
 	for (int p = 0; p < Np; p++)
 	{
-		if (int(p % (Np / 10)) == 0)
-		{
-			A = p / Np * 100;
-			printf("Running...\n");
-		}
+	    if (p==0){
+            cout << "Using OpenMP with " << omp_get_num_threads() << " threads" << endl;
+	    }
 		std::uniform_int_distribution<int> dist_x(0, nb_x-1);
 		std::uniform_real_distribution<double> distribution_x(0.0, x_grid);
 		double x = dist_x(generator) * x_grid + distribution_x(generator);
@@ -125,7 +128,7 @@ vector<double> fast_simulation(int Np)
 			int Case(0), bounds(0);
 			double length = 0;
 			bool case3(false), taper(false), cut_edge_effect(false), condition(false), detected(false);
-			
+
 			int b = int(zA_i / lz) + 1;
 			double alpha_1;
 			double xA, yA, zA;
@@ -253,9 +256,9 @@ vector<double> fast_simulation(int Np)
 							}
 						}
 						else
-						{ 
+						{
 							if (delta_1_abs<Pi/4)
-							{ 
+							{
 								Case = 1;
 							}
 							else
@@ -390,13 +393,13 @@ vector<double> fast_simulation(int Np)
 				R0 = pow((n_silica - n_air) / (n_silica + n_air), 2);
 				R = R0 + (1 - R0) * pow(1 - cos(theta_in), 5);
 				if (taper)
-				{ 
+				{
 					delta_2 = fabs(delta_2 - 2 * alpha_t);
 					delta_3 = fabs(delta_3 - 2 * atan(cos(alpha_2) * tan(alpha_t)));
 				}
 				bounds = bounds + int((L_rad[b - 1] - yA - lx) * (tan(alpha_1) / lz + tan(delta_1) / lx) + L_lg * (tan(alpha_2) / lz + tan(delta_2) / 5));
 				if (!case3)
-				{ 
+				{
 					l = (yC - yA) / (cos(delta) * cos(alpha_1)) + L_lg / (cos(alpha_2) * cos(delta_3));
 					pabs = 1 - exp(-mu_abs * l);
 					std::uniform_real_distribution<double> distribution_x(0, 1);
@@ -418,7 +421,7 @@ vector<double> fast_simulation(int Np)
 						Case = 3;
 						detected = true;
 					}
-						
+
 				}
 			}
 
@@ -440,7 +443,9 @@ vector<double> fast_simulation(int Np)
 
 				double detected_nb = 1;
 
-				M.insert(M.end(), { double(p + 1), x_LHC / 1e3, y_LHC / 1e3, z_LHC / 1e3, double(r + 1), xA_LHC / 1e3, yA_LHC / 1e3, zA_LHC / 1e3, theta_ch, phi, detected_nb, double(t), double(b), double(Case), l / 1e3, time / 1e3 });
+                #pragma omp ordered
+				//M.insert(M.end(), { double(p + 1), x_LHC / 1e3, y_LHC / 1e3, z_LHC / 1e3, double(r + 1), xA_LHC / 1e3, yA_LHC / 1e3, zA_LHC / 1e3, theta_ch, phi, detected_nb, double(t), double(b), double(Case), l / 1e3, time / 1e3 });
+                outfile << double(p+1) << ", " << x_LHC/1e3 << ", " << y_LHC/1e3 << ", " << z_LHC/1e3 << ", " << double(r+1) << ", " << xA_LHC/1e3 << ", " << yA_LHC/1e3 << ", " << zA_LHC/1e3 << ", " << theta_ch << ", " << phi << ", " << detected_nb << ", " << double(t) << ", " << double(b)<< ", " << double(Case) << ", " << l/1e3 << ", " << time/1e3 << endl;
 			}
 			else
 			{
@@ -449,18 +454,9 @@ vector<double> fast_simulation(int Np)
 			}
 		}
 	}
-	printf("Number of photons generated: %i\n", count_tot);
-	return M;
-}
-
-int main()
-{
-	auto begin = std::chrono::high_resolution_clock::now();
-	printf("N_mean = %f \n", N_mean);
-	vector<double> M = fast_simulation(10000);
+    outfile.close();
 	auto end = std::chrono::high_resolution_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
 	printf("Time measured: %.3f seconds.\n", elapsed.count() * 1e-9);
-	return 0;
-	
+    return 0;
 }
